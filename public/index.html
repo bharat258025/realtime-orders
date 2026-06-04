@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Real-Time Orders</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 14px; background: #f5f5f5; color: #333; }
+
+    header {
+      background: #4CAF50;
+      color: white;
+      padding: 14px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 { font-size: 18px; }
+    #status { font-size: 13px; background: rgba(0,0,0,0.2); padding: 4px 10px; border-radius: 12px; }
+    #status.connected { background: rgba(255,255,255,0.3); }
+
+    .container { display: flex; gap: 16px; padding: 16px; max-width: 1100px; margin: auto; }
+
+    /* Sidebar */
+    .sidebar { width: 260px; flex-shrink: 0; }
+    .card { background: white; border: 1px solid #ddd; border-radius: 6px; padding: 16px; margin-bottom: 16px; }
+    .card h3 { font-size: 14px; margin-bottom: 12px; color: #555; }
+
+    label { display: block; font-size: 12px; color: #666; margin-bottom: 3px; margin-top: 10px; }
+    label:first-of-type { margin-top: 0; }
+    input, select {
+      width: 100%; padding: 7px 9px; border: 1px solid #ccc;
+      border-radius: 4px; font-size: 13px; outline: none;
+    }
+    input:focus, select:focus { border-color: #4CAF50; }
+    button.submit {
+      width: 100%; margin-top: 12px; padding: 9px;
+      background: #4CAF50; color: white; border: none;
+      border-radius: 4px; font-size: 13px; cursor: pointer;
+    }
+    button.submit:hover { background: #43a047; }
+
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat { text-align: center; padding: 10px; background: #f9f9f9; border: 1px solid #eee; border-radius: 4px; }
+    .stat .num { font-size: 22px; font-weight: bold; }
+    .stat .lbl { font-size: 11px; color: #888; margin-top: 2px; }
+    .stat.ins .num { color: #4CAF50; }
+    .stat.upd .num { color: #FF9800; }
+    .stat.del .num { color: #f44336; }
+
+    /* Feed */
+    .feed { flex: 1; }
+    .feed-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .feed-header h2 { font-size: 15px; color: #444; }
+    #clear-btn { padding: 5px 12px; background: white; border: 1px solid #ccc; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    #clear-btn:hover { background: #f44336; color: white; border-color: #f44336; }
+
+    #event-list { display: flex; flex-direction: column; gap: 8px; }
+
+    .empty { text-align: center; padding: 40px; color: #aaa; background: white; border: 1px solid #ddd; border-radius: 6px; }
+
+    .event {
+      background: white; border: 1px solid #ddd; border-radius: 6px;
+      padding: 12px 14px; border-left: 4px solid #ccc;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    .event.insert { border-left-color: #4CAF50; }
+    .event.update { border-left-color: #FF9800; }
+    .event.delete { border-left-color: #f44336; }
+
+    .event-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .badge { font-size: 11px; font-weight: bold; padding: 2px 8px; border-radius: 3px; text-transform: uppercase; }
+    .badge.insert { background: #e8f5e9; color: #4CAF50; }
+    .badge.update { background: #fff3e0; color: #FF9800; }
+    .badge.delete { background: #ffebee; color: #f44336; }
+    .event-time { font-size: 11px; color: #aaa; }
+
+    .event-body { font-size: 13px; color: #555; }
+    .event-body span { color: #222; font-weight: 500; }
+    .event-id { font-size: 11px; color: #bbb; margin-top: 4px; }
+
+    .status-tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; margin-left: 6px; }
+    .status-tag.pending  { background: #fff3e0; color: #FF9800; }
+    .status-tag.shipped  { background: #e3f2fd; color: #1976D2; }
+    .status-tag.delivered { background: #e8f5e9; color: #4CAF50; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Real-Time Orders</h1>
+  <span id="status">Connecting...</span>
+</header>
+
+<div class="container">
+
+  <div class="sidebar">
+    <div class="card">
+      <h3>Add Order</h3>
+      <label>Customer Name</label>
+      <input type="text" id="customerName" placeholder="e.g. John Doe" />
+      <label>Product Name</label>
+      <input type="text" id="productName" placeholder="e.g. Laptop" />
+      <label>Status</label>
+      <select id="status-select">
+        <option value="pending">Pending</option>
+        <option value="shipped">Shipped</option>
+        <option value="delivered">Delivered</option>
+      </select>
+      <button class="submit" onclick="createOrder()">Create Order</button>
+    </div>
+
+    <div class="card">
+      <h3>Event Stats</h3>
+      <div class="stats">
+        <div class="stat ins"><div class="num" id="c-insert">0</div><div class="lbl">Inserts</div></div>
+        <div class="stat upd"><div class="num" id="c-update">0</div><div class="lbl">Updates</div></div>
+        <div class="stat del"><div class="num" id="c-delete">0</div><div class="lbl">Deletes</div></div>
+        <div class="stat"><div class="num" id="c-total">0</div><div class="lbl">Total</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="feed">
+    <div class="feed-header">
+      <h2>Live Event Feed</h2>
+      <button id="clear-btn" onclick="clearFeed()">Clear</button>
+    </div>
+    <div id="event-list">
+      <div class="empty" id="empty">No events yet. Create an order to see live updates.</div>
+    </div>
+  </div>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const events = [];
+  const counts = { insert: 0, update: 0, delete: 0 };
+
+  const socket = io();
+
+  socket.on("connect", () => {
+    const el = document.getElementById("status");
+    el.textContent = "Connected";
+    el.className = "connected";
+  });
+
+  socket.on("disconnect", () => {
+    const el = document.getElementById("status");
+    el.textContent = "Disconnected";
+    el.className = "";
+  });
+
+  socket.on("orderChange", (data) => {
+    events.unshift(data);
+    counts[data.operation] = (counts[data.operation] || 0) + 1;
+    updateStats();
+    renderEvents();
+  });
+
+  function updateStats() {
+    document.getElementById("c-insert").textContent = counts.insert || 0;
+    document.getElementById("c-update").textContent = counts.update || 0;
+    document.getElementById("c-delete").textContent = counts.delete || 0;
+    document.getElementById("c-total").textContent = events.length;
+  }
+
+  function renderEvents() {
+    const list = document.getElementById("event-list");
+    document.getElementById("empty").style.display = events.length ? "none" : "block";
+    const cards = events.map(e => {
+      const time = new Date(e.timestamp).toLocaleTimeString();
+      let body = "";
+      if (e.operation === "insert") {
+        body = `<div class="event-body">
+          Customer: <span>${e.customerName}</span> &nbsp;|&nbsp;
+          Product: <span>${e.productName}</span>
+          <span class="status-tag ${e.status}">${e.status}</span>
+        </div>`;
+      } else if (e.operation === "update") {
+        const fields = Object.entries(e.updatedFields || {})
+          .filter(([k]) => k !== "updatedAt" && k !== "__v")
+          .map(([k, v]) => `${k}: <span>${v}</span>`).join(" &nbsp;|&nbsp; ");
+        body = `<div class="event-body">${fields || "Order updated"}</div>`;
+      } else {
+        body = `<div class="event-body">Order deleted</div>`;
+      }
+      return `<div class="event ${e.operation}">
+        <div class="event-top">
+          <span class="badge ${e.operation}">${e.operation}</span>
+          <span class="event-time">${time}</span>
+        </div>
+        ${body}
+        <div class="event-id">ID: ${e.orderId}</div>
+      </div>`;
+    }).join("");
+    list.innerHTML = `<div class="empty" id="empty" style="display:${events.length ? 'none' : 'block'}">No events yet. Create an order to see live updates.</div>` + cards;
+  }
+
+  function clearFeed() {
+    events.length = 0;
+    counts.insert = counts.update = counts.delete = 0;
+    updateStats();
+    renderEvents();
+  }
+
+  async function createOrder() {
+    const customerName = document.getElementById("customerName").value.trim();
+    const productName  = document.getElementById("productName").value.trim();
+    const status       = document.getElementById("status-select").value;
+    if (!customerName || !productName) { alert("Please fill in all fields."); return; }
+    const res = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customerName, productName, status })
+    });
+    if (res.ok) {
+      document.getElementById("customerName").value = "";
+      document.getElementById("productName").value = "";
+    } else {
+      const err = await res.json();
+      alert(err.message);
+    }
+  }
+</script>
+</body>
+</html>
