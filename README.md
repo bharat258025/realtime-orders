@@ -324,17 +324,3 @@ npm install @socket.io/redis-adapter ioredis
 - **Rate limiting** — per-client event throttling to prevent flooding slow consumers
 
 ---
-
-## Interview Notes
-
-**Q: Why not just emit from the controller?**
-The controller only knows about HTTP-triggered changes. Direct DB writes (admin tools, migrations, other services) would be invisible. Change Streams make the notification layer independent of *how* the data changed.
-
-**Q: What if the server restarts mid-stream?**
-MongoDB Change Streams support **resume tokens**. Store the last seen token on shutdown, and pass `{ resumeAfter: token }` when reopening the stream. This guarantees zero missed events.
-
-**Q: Why Atlas and not local MongoDB?**
-Change Streams require a replica set (they read from the oplog). Atlas provides a 3-node replica set even on the free tier. For local development you can run `mongod --replSet rs0` and initiate it with `rs.initiate()`.
-
-**Q: How does this scale to 10,000 concurrent clients?**
-Socket.IO handles WebSocket connections efficiently. The bottleneck is single-process Node.js. Add horizontal scaling with sticky sessions and the Socket.IO Redis adapter. The Change Stream itself scales independently of client count.
